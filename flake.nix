@@ -18,8 +18,13 @@
         devShells.default = pkgs.mkShell { 
           nativeBuildInputs = [ pkgs.bashInteractive ]; 
           buildInputs = with pkgs; [ 
-            R rPackages.pagedown rPackages.rmarkdown rPackages.tidyverse
-            rPackages.httpgd
+            (
+              rWrapper.override{ 
+                packages = with rPackages; [
+                  pagedown rmarkdown tidyverse
+                  httpgd languageserver knitr
+                ];
+            })
             chromium 
             pandoc 
           ];
