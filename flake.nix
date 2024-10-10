@@ -19,6 +19,7 @@
           nativeBuildInputs = [ pkgs.bashInteractive ]; 
           buildInputs = with pkgs; [ 
             R rPackages.pagedown rPackages.rmarkdown rPackages.tidyverse
+            rPackages.httpgd
             chromium 
             pandoc 
           ];
