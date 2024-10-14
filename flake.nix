@@ -23,6 +23,7 @@
                 packages = with rPackages; [
                   pagedown rmarkdown tidyverse
                   httpgd languageserver knitr
+                  geobr
                   jsonlite rlang
                 ];
             })
