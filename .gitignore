@@ -1,2 +1,6 @@
 .envrc
 /.direnv
+/.venv
+.Rproj.user
+.Rhistory
+.RData
