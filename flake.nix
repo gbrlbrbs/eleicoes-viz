@@ -23,11 +23,17 @@
                 packages = with rPackages; [
                   pagedown rmarkdown tidyverse
                   httpgd languageserver knitr
+                  jsonlite rlang
                 ];
             })
             chromium 
             pandoc 
           ];
+
+          shellHook = ''
+            export R_HOME=''$(R -e "cat(R.home())" -q -s)
+            export R_PATH=''$(which R)
+          '';
         };
       }
     );
