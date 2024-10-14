@@ -1,0 +1,20 @@
+---
+
+---
+
+```{r}
+library(tidyverse)
+```
+
+```{r}
+df <- read_csv("data/afinidade_ideologica.csv")
+head(df)
+```
+
+```{r}
+df_all <- read.csv("data/votacao_partido_munzona_2024/votacao_partido_munzona_2024_BRASIL.csv", sep = ";")
+
+head(df_all)
+```
+
+
