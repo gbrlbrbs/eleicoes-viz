@@ -13,26 +13,20 @@
       system:
       let
         pkgs = nixpkgs.legacyPackages.${system};
+        rPacks = with pkgs.rPackages; [ pagedown rmarkdown tidyverse httpgd languageserver knitr geobr sf jsonlite rlang basedosdados ];
       in
       {
         devShells.default = pkgs.mkShell { 
           nativeBuildInputs = [ pkgs.bashInteractive ]; 
           buildInputs = with pkgs; [ 
-            (
-              rWrapper.override{ 
-                packages = with rPackages; [
-                  pagedown rmarkdown tidyverse
-                  httpgd languageserver knitr
-                  geobr
-                  jsonlite rlang
-                ];
-            })
+            R
             chromium 
-            pandoc 
-          ];
-
+            pandoc
+            geos
+            gdal
+            proj
+          ] ++ rPacks;
           shellHook = ''
-            export R_HOME=''$(R -e "cat(R.home())" -q -s)
             export R_PATH=''$(which R)
           '';
         };
