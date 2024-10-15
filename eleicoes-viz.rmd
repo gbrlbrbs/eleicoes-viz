@@ -4,17 +4,134 @@
 
 ```{r}
 library(tidyverse)
+library(geobr)
+library(basedosdados)
+
+afinidade <- read_csv("data/afinidade_ideologica.csv")
+glimpse(afinidade)
 ```
 
 ```{r}
-df <- read_csv("data/afinidade_ideologica.csv")
-head(df)
+afinidade <- afinidade |>
+  mutate(
+    partido = as.factor(partido),
+    label = as.factor(label)
+  )
+```
+
+
+```{r}
+df_all <- read_delim(
+  "data/votacao_partido_munzona_2024_BRASIL.csv", 
+  delim = ";", locale = locale(encoding = "latin1")
+)
+glimpse(df_all)
+```
+
+
+```{r}
+df_prefeitos <- df_all |>
+  filter(DS_CARGO == "Prefeito") |>
+  mutate(
+    uf = as.factor(SG_UF),
+    partido = as.factor(SG_PARTIDO),
+    id_municipio_tse = as.integer(CD_MUNICIPIO),
+    QT_VOTOS_NOMINAIS_VALIDOS = as.integer(QT_VOTOS_NOMINAIS_VALIDOS),
+    QT_VOTOS_NOMINAIS_ANUL_SUBJUD = as.integer(QT_VOTOS_NOMINAIS_ANUL_SUBJUD),
+  ) |>
+  group_by(NM_MUNICIPIO, uf, partido, id_municipio_tse) |>
+  summarise(
+    votos_nominais_validos = sum(QT_VOTOS_NOMINAIS_VALIDOS),
+    votos_nominais_anul = sum(QT_VOTOS_NOMINAIS_ANUL_SUBJUD),
+  ) |>
+  group_by(NM_MUNICIPIO, uf) |>
+  filter(dense_rank(desc(votos_nominais_validos)) == 1) # pegar o vencedor
 ```
 
 ```{r}
-df_all <- read.csv("data/votacao_partido_munzona_2024/votacao_partido_munzona_2024_BRASIL.csv", sep = ";")
-
-head(df_all)
+df_prefeitos |>
+  count(NM_MUNICIPIO, uf, id_municipio_tse) |>
+  arrange(desc(n))
 ```
 
+Inhaúma teve um empate, [com o candidato do Republicanos ganhando pelo critério da idade](https://g1.globo.com/mg/minas-gerais/eleicoes/2024/noticia/2024/10/06/eleicao-em-inhauma-mg-termina-empatada-em-2434-x-2434-votos-entenda-como-vencedor-e-escolhido.ghtml).
+
+```{r}
+df_prefeitos <- df_prefeitos |> filter(id_municipio_tse != 46191 | partido == "REPUBLICANOS")
+```
+
+
+```{r}
+# link tse-ibge by basedosdados
+query <- "
+SELECT
+    dados.id_municipio as id_municipio,
+    dados.id_municipio_tse as id_municipio_tse
+FROM `basedosdados.br_bd_diretorios_brasil.municipio` AS dados
+"
+
+df_ibge_tse <- read_sql(query, billing_project_id = get_billing_id())
+```
+
+
+```{r}
+df_ibge_tse <- df_ibge_tse |>
+  mutate(
+    id_municipio = as.integer(id_municipio),
+    id_municipio_tse = as.integer(id_municipio_tse),
+  )
+head(df_ibge_tse)
+```
+
+Checar nulos:
+
+```{r}
+df_prefeitos |>
+  left_join(df_ibge_tse, by = join_by(id_municipio_tse)) |>
+  filter(is.na(id_municipio))
+```
+
+[Boa Esperança do Norte é um município novo](https://g1.globo.com/mt/mato-grosso/noticia/2023/10/13/conheca-boa-esperanca-do-norte-e-saiba-o-que-tem-no-novo-municipio-de-mt.ghtml) que não deve ter entrado na base do IBGE. Não haverá muito problema removê-lo da análise pois ele não possui código IBGE e, portanto, não haverá match no shapefile.
+
+```{r}
+df_prefeitos_ibge <- df_prefeitos |>
+  left_join(df_ibge_tse, by = join_by(id_municipio_tse)) |>
+  filter(!is.na(id_municipio))
+```
+
+Finalmente, o shapefile dos municípios brasileiros:
+
+```{r}
+mun <- read_municipality(code_muni = "all", year = 2022)
+glimpse(mun)
+```
+
+
+```{r}
+mun_votos <- mun |>
+  mutate(code_muni = as.integer(code_muni)) |>
+  left_join(df_prefeitos_ibge, by = join_by(code_muni == id_municipio)) |>
+  select(code_muni, name_muni, uf, votos_nominais_validos, partido)
+glimpse(mun_votos)
+```
+
+
+```{r}
+mun_votos |> 
+  distinct(partido)
+```
+
+
+```{r}
+mun_votos <- mun_votos |>
+  left_join(afinidade, by = join_by(partido)) |>
+  select(code_muni:partido, label, geom)
+glimpse(mun_votos)
+```
+
+Plotando
+
+```{r}
+
+```
 
