@@ -6,6 +6,8 @@
 library(tidyverse)
 library(geobr)
 library(basedosdados)
+library(sf)
+library(cartogram)
 
 afinidade <- read_csv("data/afinidade_ideologica.csv")
 glimpse(afinidade)
@@ -102,7 +104,7 @@ df_prefeitos_ibge <- df_prefeitos |>
 Finalmente, o shapefile dos municípios brasileiros:
 
 ```{r}
-mun <- read_municipality(code_muni = "all", year = 2022)
+mun <- read_municipality(code_muni = "all", year = 2022, simplified = T)
 glimpse(mun)
 ```
 
@@ -129,9 +131,72 @@ mun_votos <- mun_votos |>
 glimpse(mun_votos)
 ```
 
+```{r}
+mun_votos |> filter(is.na(label))
+```
+
+
 Plotando
 
-```{r}
+```{r, fig.align='center', fig.width=18}
+mapa_cor_label = c(
+  "esquerda_1" = "#b5000f",
+  "esquerda_2" = "#fc0c20",
+  "esquerda_3" = "#fc5f6c",
+  "centro_1" = "#8ACE00",
+  "centro_2" = "#13D626",
+  "centro_3" = "#18BC4F",
+  "direita_1" = "#2C5EF4",
+  "direita_2" = "#0C19D1",
+  "direita_3" = "#010CA0"
+)
 
+mun_votos |>
+  ggplot(mapping = aes(fill = label)) +
+  geom_sf(color="#FEBF57") +
+  labs(title = "Municípios do Brasil por cluster de afinidade política nas votações de primeiro turno para prefeito (2024)") +
+  scale_fill_manual(values = mapa_cor_label)
 ```
+
+Gerando um cartograma
+
+```{r}
+mun_votos_cart <- mun_votos |>
+  filter(!is.na(partido)) |>
+  st_transform(crs = 31970) |>
+  cartogram_dorling(weight = "votos_nominais_validos", m_weight = 1, itermax=20)
+```
+
+```{r, fig.align='center', fig.width=20}
+mun_votos_cart |>
+  ggplot(mapping = aes(fill = label)) +
+  geom_sf(color="#FEBF57") +
+  labs(title = "Municípios do Brasil por cluster de afinidade política nas votações de primeiro turno para prefeito (2024)") +
+  scale_fill_manual(values = mapa_cor_label)
+```
+
+
+```{r}
+mun_sp <- read_municipality("SP", year = 2022, simplified = T) |>
+  mutate(code_muni = as.integer(code_muni)) |>
+  left_join(df_prefeitos_ibge, by = join_by(code_muni == id_municipio)) |>
+  select(code_muni, name_muni, uf, votos_nominais_validos, partido) |>
+  left_join(afinidade, by = join_by(partido)) |>
+  select(code_muni:partido, label, geom)
+```
+
+```{r}
+mun_sp_cart <- mun_sp |>
+  st_transform(31970) |>
+  cartogram_cont(weight = "votos_nominais_validos", itermax=10)
+```
+
+```{r, fig.align='center', fig.width=20}
+mun_sp_cart |>
+  ggplot(mapping = aes(fill = label)) +
+  geom_sf(color="#FEBF57") +
+  labs(title = "Municípios de São Paulo por cluster de afinidade política nas votações de primeiro turno para prefeito (2024)") +
+  scale_fill_manual(values = mapa_cor_label)
+```
+
 
