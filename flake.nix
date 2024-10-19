@@ -12,12 +12,20 @@
     flake-utils.lib.eachDefaultSystem (
       system:
       let
-        pkgs = nixpkgs.legacyPackages.${system};
-        rPacks = with pkgs.rPackages; [ pagedown rmarkdown tidyverse httpgd languageserver knitr geobr sf jsonlite rlang basedosdados ];
+        pkgs = import nixpkgs{ inherit system; };
+        rPacks = with pkgs.rPackages; [ 
+          pagedown rmarkdown tidyverse 
+          httpgd knitr geobr sf 
+          jsonlite rlang 
+          basedosdados cartogram
+          cartogramR dotenv 
+        ];
       in
       {
         devShells.default = pkgs.mkShell { 
-          nativeBuildInputs = [ pkgs.bashInteractive ]; 
+          nativeBuildInputs = with pkgs; [ 
+            bashInteractive
+          ]; 
           buildInputs = with pkgs; [ 
             R
             chromium 
