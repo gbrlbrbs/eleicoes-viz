@@ -2,16 +2,23 @@
 
 ---
 
+# Visualizações dos municípios brasileiros nas eleições de 2024
+
+Criei esse notebook para ser um projetinho de visualização geográfica do primeiro turno das eleições municipais de 2024, buscando também incluir dados comparativos de população nos dados geográficos.
+
+## Carregar dados de partidos políticos e das eleições
+
+Os dados de afinidade política vem da análise do grupo de dados da Folha de S. Paulo, a DeltaFolha. O repositório está [neste link](https://github.com/deltafolha/proximidade-partidaria-2024/tree/main).
+
 ```{r}
 library(tidyverse)
 library(geobr)
-library(basedosdados)
 library(sf)
-library(cartogram)
 
 afinidade <- read_csv("data/afinidade_ideologica.csv")
 glimpse(afinidade)
 ```
+Mutar os tipos de dados das colunas para ficar mais fácil a visualização futura:
 
 ```{r}
 afinidade <- afinidade |>
@@ -21,6 +28,7 @@ afinidade <- afinidade |>
   )
 ```
 
+Os dados das eleições vieram do [próprio site do TSE](https://dadosabertos.tse.jus.br/dataset/resultados-2024).
 
 ```{r}
 df_all <- read_delim(
@@ -30,6 +38,7 @@ df_all <- read_delim(
 glimpse(df_all)
 ```
 
+Pipeline para pegar os dados dos prefeitos vencedores por município:
 
 ```{r}
 df_prefeitos <- df_all |>
@@ -50,6 +59,8 @@ df_prefeitos <- df_all |>
   filter(dense_rank(desc(votos_nominais_validos)) == 1) # pegar o vencedor
 ```
 
+Checando por empates:
+
 ```{r}
 df_prefeitos |>
   count(NM_MUNICIPIO, uf, id_municipio_tse) |>
@@ -62,27 +73,17 @@ Inhaúma teve um empate, [com o candidato do Republicanos ganhando pelo critéri
 df_prefeitos <- df_prefeitos |> filter(id_municipio_tse != 46191 | partido == "REPUBLICANOS")
 ```
 
+Carregar relação IBGE-TSE:
 
 ```{r}
-# link tse-ibge by basedosdados
-query <- "
-SELECT
-    dados.id_municipio as id_municipio,
-    dados.id_municipio_tse as id_municipio_tse
-FROM `basedosdados.br_bd_diretorios_brasil.municipio` AS dados
-"
+df_ibge_tse <- read_csv("data/codigo_ibge_tse.csv")
 
-df_ibge_tse <- read_sql(query, billing_project_id = get_billing_id())
-```
-
-
-```{r}
 df_ibge_tse <- df_ibge_tse |>
   mutate(
     id_municipio = as.integer(id_municipio),
     id_municipio_tse = as.integer(id_municipio_tse),
   )
-head(df_ibge_tse)
+glimpse(df_ibge_tse)
 ```
 
 Checar nulos:
@@ -93,53 +94,56 @@ df_prefeitos |>
   filter(is.na(id_municipio))
 ```
 
-[Boa Esperança do Norte é um município novo](https://g1.globo.com/mt/mato-grosso/noticia/2023/10/13/conheca-boa-esperanca-do-norte-e-saiba-o-que-tem-no-novo-municipio-de-mt.ghtml) que não deve ter entrado na base do IBGE. Não haverá muito problema removê-lo da análise pois ele não possui código IBGE e, portanto, não haverá match no shapefile.
+[Boa Esperança do Norte é um município novo](https://g1.globo.com/mt/mato-grosso/noticia/2023/10/13/conheca-boa-esperanca-do-norte-e-saiba-o-que-tem-no-novo-municipio-de-mt.ghtml) que não deve ter entrado na base do IBGE. Não haverá muito problema removê-lo da análise pois ele não possui código IBGE e, portanto, não haverá match com o shapefile.
 
 ```{r}
 df_prefeitos_ibge <- df_prefeitos |>
   left_join(df_ibge_tse, by = join_by(id_municipio_tse)) |>
-  filter(!is.na(id_municipio))
+  filter(!is.na(id_municipio)) |>
+  left_join(afinidade, by = join_by(partido)) |>
+  select(NM_MUNICIPIO:id_municipio, label) |>
+  ungroup()
 ```
 
-Finalmente, o shapefile dos municípios brasileiros:
+## Shapefile dos municípios brasileiros
+
+Finalmente, carregamos o shapefile dos municípios brasileiros, usando o pacote [geobr](https://github.com/ipeaGIT/geobr):
 
 ```{r}
 mun <- read_municipality(code_muni = "all", year = 2022, simplified = T)
 glimpse(mun)
 ```
 
+### Data wrangling do shapefile
+
+Join com o dataframe de prefeitos vencedores:
 
 ```{r}
 mun_votos <- mun |>
   mutate(code_muni = as.integer(code_muni)) |>
   left_join(df_prefeitos_ibge, by = join_by(code_muni == id_municipio)) |>
-  select(code_muni, name_muni, uf, votos_nominais_validos, partido)
+  select(code_muni, name_muni, uf, votos_nominais_validos, partido, label)
 glimpse(mun_votos)
 ```
 
+Checar os valores distintos:
 
 ```{r}
 mun_votos |> 
-  distinct(partido)
+  distinct(partido) |>
+  as.list()
 ```
 
-
-```{r}
-mun_votos <- mun_votos |>
-  left_join(afinidade, by = join_by(partido)) |>
-  select(code_muni:partido, label, geom)
-glimpse(mun_votos)
-```
+Checando nulos:
 
 ```{r}
 mun_votos |> filter(is.na(label))
 ```
 
-
 Plotando
 
 ```{r, fig.align='center', fig.width=18}
-mapa_cor_label = c(
+mapa_cor_label <- c(
   "esquerda_1" = "#b5000f",
   "esquerda_2" = "#fc0c20",
   "esquerda_3" = "#fc5f6c",
@@ -152,51 +156,64 @@ mapa_cor_label = c(
 )
 
 mun_votos |>
+  filter(!is.na(label)) |>
   ggplot(mapping = aes(fill = label)) +
   geom_sf(color="#FEBF57") +
   labs(title = "Municípios do Brasil por cluster de afinidade política nas votações de primeiro turno para prefeito (2024)") +
   scale_fill_manual(values = mapa_cor_label)
 ```
 
-Gerando um cartograma
+Treemap para comparar as áreas de votos válidos:
 
 ```{r}
-mun_votos_cart <- mun_votos |>
-  filter(!is.na(partido)) |>
-  st_transform(crs = 31970) |>
-  cartogram_dorling(weight = "votos_nominais_validos", m_weight = 1, itermax=20)
-```
+library(networkD3)
+library(treemapify)
 
-```{r, fig.align='center', fig.width=20}
-mun_votos_cart |>
-  ggplot(mapping = aes(fill = label)) +
-  geom_sf(color="#FEBF57") +
-  labs(title = "Municípios do Brasil por cluster de afinidade política nas votações de primeiro turno para prefeito (2024)") +
+
+df_prefeitos_ibge |>
+  mutate(
+    label = as.character(label),
+    campo_politico = str_split_i(label, "_", i = 1)
+  ) |>
+  group_by(campo_politico, label) |>
+  summarise(
+    votos = sum(votos_nominais_validos)
+  ) |>
+  ungroup() |>
+  ggplot(mapping = aes(area = votos, fill = label, subgroup = campo_politico, subgroup2 = label)) +
+  geom_treemap() +
+  geom_treemap_subgroup_border(size = 1) +
+  geom_treemap_subgroup_text(place = "middle", colour = "#fff") +
   scale_fill_manual(values = mapa_cor_label)
 ```
 
+Contabilizando `centro_1` na esquerda e `centro_3` na direita:
 
 ```{r}
-mun_sp <- read_municipality("SP", year = 2022, simplified = T) |>
-  mutate(code_muni = as.integer(code_muni)) |>
-  left_join(df_prefeitos_ibge, by = join_by(code_muni == id_municipio)) |>
-  select(code_muni, name_muni, uf, votos_nominais_validos, partido) |>
-  left_join(afinidade, by = join_by(partido)) |>
-  select(code_muni:partido, label, geom)
-```
-
-```{r}
-mun_sp_cart <- mun_sp |>
-  st_transform(31970) |>
-  cartogram_cont(weight = "votos_nominais_validos", itermax=10)
-```
-
-```{r, fig.align='center', fig.width=20}
-mun_sp_cart |>
-  ggplot(mapping = aes(fill = label)) +
-  geom_sf(color="#FEBF57") +
-  labs(title = "Municípios de São Paulo por cluster de afinidade política nas votações de primeiro turno para prefeito (2024)") +
+df_prefeitos_ibge |>
+  mutate(
+    label = as.character(label),
+    campo_politico = if_else(
+      label == "centro_1", "esquerda",
+      if_else(label == "centro_3", "direita", str_split_i(label, "_", i = 1))
+    )
+  ) |>
+  group_by(campo_politico, label) |>
+  summarise(
+    votos = sum(votos_nominais_validos)
+  ) |>
+  ungroup() |>
+  ggplot(mapping = aes(area = votos, fill = label, subgroup = campo_politico, subgroup2 = label)) +
+  geom_treemap() +
+  geom_treemap_subgroup_border(size = 1) +
+  geom_treemap_subgroup_text(place = "middle", colour = "#fff") +
   scale_fill_manual(values = mapa_cor_label)
 ```
 
+Treemap contendo as populações de cada município, utilizando o pacote [censobr](https://github.com/cran/censobr):
+
+```{r}
+library(arrow)
+library(censobr)
+```
 
