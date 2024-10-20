@@ -19,6 +19,8 @@
           jsonlite rlang 
           basedosdados cartogram
           cartogramR dotenv 
+          treemapify networkD3
+          arrow censobr
         ];
       in
       {
